@@ -10,7 +10,8 @@
     "build": "tsc --build",
     "clean": "tsc --build --clean",
     "copy-files": "cp -r ./src/db/migrations/scripts/ ./dist/db/migrations/scripts/",
-    "migrate:dev": "ts-node dist/db/migrations/run-migrations.js"
+    "migrate:prod": "node dist/db/migrations/run-migrations.js",
+    "migrate:dev": "ts-node src/db/migrations/run-migrations.ts"
   },
   "author": "",
   "license": "ISC",
