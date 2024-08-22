@@ -7,17 +7,18 @@ async function runInitMigrationFile(client: PoolClient) {
   const path = "00000001-init-migrations.sql";
 
   try {
+    const query = await promisify(fs.readFile)(`${__dirname}/scripts/${path}`, {
+      encoding: "utf-8",
+    });
+    console.log("🚀 ~ query ~ query:", query);
+
+    await client.query(query.toString());
+
     const result = await client.query("SELECT * FROM migrations");
     const foundMigrationFIle = result.rows.find((r) => r.file === path);
     if (foundMigrationFIle) {
       return;
     }
-
-    const query = await promisify(fs.readFile)(`${__dirname}/${path}`, {
-      encoding: "utf-8",
-    });
-
-    await client.query(query.toString());
 
     await client.query("INSERT INTO migrations (file) VALUES ($1)", [path]);
   } catch (error) {
@@ -26,18 +27,23 @@ async function runInitMigrationFile(client: PoolClient) {
 }
 
 async function getOutstandingMigrations(migrations: string[] = []) {
-  const files = await promisify(fs.readdir)(__dirname);
+  const files = await promisify(fs.readdir)(`${__dirname}/scripts`);
+  console.log("🚀 ~ getOutstandingMigrations ~ files:", files);
   const sql = await Promise.all(
     files
       .filter((file) => file.split(".")[1] === "sql")
       .filter((file) => !migrations.includes(file))
-      .map(async (file) => ({
-        file,
-        query: await promisify(fs.readFile)(`${__dirname}/${file}`, {
-          encoding: "utf-8",
-        }),
-      }))
+      .map(async (file) => {
+        console.log("🚀 ~ .map ~ file:", file);
+        return {
+          file,
+          query: await promisify(fs.readFile)(`${__dirname}/scripts/${file}`, {
+            encoding: "utf-8",
+          }),
+        };
+      })
   );
+  console.log("🚀 ~ getOutstandingMigrations ~ sql:", sql);
 
   return sql;
 }
@@ -46,10 +52,12 @@ async function migrate() {
   // Check previous migrations
   const client = await getClient();
   await runInitMigrationFile(client);
-  let existingMigrations = [];
+  let existingMigrations: string[] = [];
   try {
     let result = await client.query("SELECT * FROM migrations");
+
     existingMigrations = result.rows.map((r) => r.file);
+    console.log("🚀 ~ migrate ~ existingMigrations:", existingMigrations);
   } catch (err) {
     console.error(err);
   }
@@ -58,6 +66,12 @@ async function migrate() {
   const outstandingMigrations = await getOutstandingMigrations(
     existingMigrations
   );
+
+  if (!outstandingMigrations.length) {
+    console.log("No outstanding migrations need to run");
+    client.release();
+    return;
+  }
 
   try {
     // Start transaction
